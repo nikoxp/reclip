@@ -1,0 +1,53 @@
+name: Build and Publish Docker Image
+
+# 定义触发条件：当推送到 main 分支或创建以 v 开头的标签（如 v1.0.0）时触发
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ 'v*' ]
+
+env:
+  # 设置注册表地址为 GitHub Container Registry
+  REGISTRY: ghcr.io
+  # 镜像名称默认为 你的用户名/项目名
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # 必须具备写入 package 的权限
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 登录到 GitHub 容器注册表
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 提取元数据（标签、版本等）以供后续构建使用
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=tag
+
+      # 构建并推送镜像
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # 如果你的 Dockerfile 不在根目录，请取消下行注释并修改路径
+          file: ./Dockerfile
